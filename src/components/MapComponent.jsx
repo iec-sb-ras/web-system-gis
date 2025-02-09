@@ -32,12 +32,19 @@ const MapComponent = () => {
 
   useEffect(() => {
     const features = data.map(item => {
-      return new Feature({
+      let eitem = { ...item };
+      delete eitem["lat"];
+      delete eitem["long"];
+      delete eitem["sample"];
+
+      const feat = new Feature({
         geometry: new Point(fromLonLat([item.long, item.lat])),
         name: item.sample,
-        id: item.id,
-        t: item.t
+        id: item.id
       });
+      feat.data = eitem;
+      console.log(feat.data);
+      return feat;
     });
 
     const vectorSource = new VectorSource({
@@ -50,7 +57,7 @@ const MapComponent = () => {
         return new Style({
           image: new Circle({
             radius: circleRadius,
-            fill: new Fill({ color: paletteFunc(feature.get("t")) }),
+            fill: new Fill({ color: paletteFunc(feature.data.t) }),
             stroke: new Stroke({ color: '#006666', width: 2 }),
             displacement: [-circleRadius, -circleRadius]
           }),
