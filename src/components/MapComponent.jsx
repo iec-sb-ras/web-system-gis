@@ -5,6 +5,7 @@ import TileLayer from 'ol/layer/Tile';
 import XYZ from 'ol/source/XYZ';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import HeatmapLayer from 'ol/layer/Heatmap';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import { fromLonLat } from 'ol/proj';
@@ -13,6 +14,7 @@ import data from '../data';
 import 'ol/ol.css';
 import SelectWidget from './SelectWidget';
 import OSM from "ol/source/OSM";
+
 
 const MapComponent = () => {
   const mapRef = useRef();
@@ -48,6 +50,9 @@ const MapComponent = () => {
       return feat;
     });
 
+    // const blur = document.getElementById('blur');
+    // const radius = document.getElementById('radius'); 
+    
     const vectorSource = new VectorSource({
       features: features
     });
@@ -59,7 +64,7 @@ const MapComponent = () => {
           image: new Circle({
             radius: circleRadius,
             fill: new Fill({ color: paletteFunc(feature.data.t) }),
-            stroke: new Stroke({ color: paletteFunc(feature.data.t+4), width: 2 }),
+            stroke: new Stroke({ color: paletteFunc(feature.data.t + 4), width: 2 }),
             displacement: [-circleRadius, -circleRadius]
           }),
           text: new Text({
@@ -80,6 +85,23 @@ const MapComponent = () => {
       visible: selectedLayer === 'uchastok'
     });
 
+    const heatMapLayer = new HeatmapLayer({
+      source: new VectorSource({
+        features:features
+      }),
+      blur: 30, // parseInt(blur.value, 10),
+      radius: 30, // parseInt(radius.value, 10),
+      weight: function (feature) {
+        // 2012_Earthquakes_Mag5.kml stores the magnitude of each earthquake in a
+        // standards-violating <magnitude> tag in each Placemark.  We extract it from
+        // the Placemark's name instead.
+        const name = feature.get('name');
+        const magnitude = feature.data.value;
+        return magnitude - 5;
+      },
+      visible: selectedLayer === 'uchastok'
+    });
+
     const topoMapLayer = new TileLayer({
       title: 'OpenTopoMap',
       type: 'base',
@@ -93,7 +115,8 @@ const MapComponent = () => {
       target: mapRef.current,
       layers: [
         topoMapLayer,
-        vectorLayer
+        vectorLayer,
+        heatMapLayer
       ],
       view: new View({
         center: fromLonLat([105.31, 56.48]),
@@ -101,6 +124,14 @@ const MapComponent = () => {
       })
     });
 
+/*     blur.addEventListener('input', function () {
+      heatMapLayer.setBlur(parseInt(blur.value, 10));
+    });
+    
+    radius.addEventListener('input', function () {
+      heatMapLayer.setRadius(parseInt(radius.value, 10));
+    });
+ */
     return () => {
       map.dispose();
       // map.setTarget(null);
@@ -120,7 +151,15 @@ const MapComponent = () => {
     <div>
       <SelectWidget options={layerOptions} onChange={handleLayerChange} />
       <div id="map" style={{ width: '800px', height: '600px' }} ref={mapRef}></div>
-    </div>
+{/*       
+      <form>
+        <label for="radius">radius size</label>
+        <input id="radius" type="range" min="1" max="50" step="1" value="5" />
+        <label for="blur">blur size</label>
+        <input id="blur" type="range" min="1" max="50" step="1" value="15" />
+      </form>
+      
+ */}    </div>
   );
 };
 
