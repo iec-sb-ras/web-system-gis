@@ -16,13 +16,26 @@ import SelectWidget from './SelectWidget';
 const MapComponent = () => {
     const mapRef = useRef();
     const [selectedLayer, setSelectedLayer] = useState('uchastok');
+    const textShift = 20;
+    const circleRadius = 10;
+    const localPalette = ['#001219', '#005F73', '#0A9396', '#94D2BD',
+        '#E9D8A6', '#EE9B00', '#CA6702', '#BB3E03',
+        '#AE2012', '#9B2226'];
+
+    const paletteFunc = (cls) => {
+        if (localPalette.length < cls) {
+            cls = cls % localPalette.length;
+        };
+        return localPalette[cls];
+    };
 
     useEffect(() => {
         const features = data.map(item => {
             return new Feature({
                 geometry: new Point(fromLonLat([item.long, item.lat])),
                 name: item.sample,
-                id: item.id
+                id: item.id,
+                t: item.t
             });
         });
 
@@ -35,18 +48,22 @@ const MapComponent = () => {
             style: (feature) => {
                 return new Style({
                     image: new Circle({
-                        radius: 5,
-                        fill: new Fill({ color: 'red' }),
-                        stroke: new Stroke({ color: 'black', width: 1 })
+                        radius: circleRadius,
+                        fill: new Fill({ color: paletteFunc(feature.get("t")) }),
+                        stroke: new Stroke({ color: '#006666', width: 2 }),
+                        displacement: [-circleRadius, -circleRadius]
                     }),
                     text: new Text({
-                        font: '12px Calibri,sans-serif',
+                        font: '24px Calibri,sans-serif',
                         fill: new Fill({ color: '#000' }),
                         stroke: new Stroke({
                             color: '#fff',
                             width: 2,
                         }),
-                        offsetX: 10,
+                        // offsetX: 20,
+                        // offsetY: -10,
+                        offsetX: textShift,
+                        offsetY: -textShift,
                         text: feature.get('name')
                     })
                 });
