@@ -15,10 +15,13 @@ import 'ol/ol.css';
 import SelectWidget from './SelectWidget';
 import OSM from "ol/source/OSM";
 
-
 const MapComponent = () => {
   const mapRef = useRef();
-  const [selectedLayer, setSelectedLayer] = useState('uchastok');
+  const [layers, setLayers] = useState([
+    { id: 'vector', label: 'Точки', visible: true },
+    { id: 'heatmap', label: 'Тепловая карта', visible: true },
+    { id: 'topomap', label: 'Топографическая карта', visible: true }
+  ]);
   const textShift = 20;
   const circleRadius = 10;
   const localPalette = ['#001219', '#005F73', '#0A9396', '#94D2BD',
@@ -51,8 +54,8 @@ const MapComponent = () => {
     });
 
     // const blur = document.getElementById('blur');
-    // const radius = document.getElementById('radius'); 
-    
+    // const radius = document.getElementById('radius');
+
     const vectorSource = new VectorSource({
       features: features
     });
@@ -74,38 +77,47 @@ const MapComponent = () => {
               color: '#fff',
               width: 2,
             }),
-            // offsetX: 20,
-            // offsetY: -10,
             offsetX: textShift,
             offsetY: -textShift,
             text: feature.get('name')
           })
         });
       },
-      visible: selectedLayer === 'uchastok'
+      visible: layers.find(layer => layer.id === 'vector').visible
     });
 
+    // const heatMapLayer = new HeatmapLayer({
+    //   source: new VectorSource({
+    //     features:features
+    //   }),
+    //   blur: 30, // parseInt(blur.value, 10),
+    //   radius: 30, // parseInt(radius.value, 10),
+    //   weight: function (feature) {
+    //     // 2012_Earthquakes_Mag5.kml stores the magnitude of each earthquake in a
+    //     // standards-violating <magnitude> tag in each Placemark.  We extract it from
+    //     // the Placemark's name instead.
+    //     const name = feature.get('name');
+    //     const magnitude = feature.data.value;
+    //     return magnitude - 5;
+    //   },
+    //   visible: selectedLayer === 'uchastok'
+    // });
+
     const heatMapLayer = new HeatmapLayer({
-      source: new VectorSource({
-        features:features
-      }),
-      blur: 30, // parseInt(blur.value, 10),
-      radius: 30, // parseInt(radius.value, 10),
+      source: vectorSource,
+      blur: 30,
+      radius: 30,
       weight: function (feature) {
-        // 2012_Earthquakes_Mag5.kml stores the magnitude of each earthquake in a
-        // standards-violating <magnitude> tag in each Placemark.  We extract it from
-        // the Placemark's name instead.
-        const name = feature.get('name');
         const magnitude = feature.data.value;
-        return magnitude - 5;
+        return magnitude != null && !isNaN(magnitude) ? magnitude : 0;
       },
-      visible: selectedLayer === 'uchastok'
+      visible: layers.find(layer => layer.id === 'heatmap').visible
     });
 
     const topoMapLayer = new TileLayer({
       title: 'OpenTopoMap',
       type: 'base',
-      visible: true,
+      visible: layers.find(layer => layer.id === 'topomap').visible,
       source: new XYZ({
         url: 'https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png'
       })
@@ -113,11 +125,12 @@ const MapComponent = () => {
 
     const map = new Map({
       target: mapRef.current,
-      layers: [
-        topoMapLayer,
-        vectorLayer,
-        heatMapLayer
-      ],
+      layers: layers.map(layer => {
+        if (layer.id === 'vector') return vectorLayer;
+        if (layer.id === 'heatmap') return heatMapLayer;
+        if (layer.id === 'topomap') return topoMapLayer;
+        return null;
+      }).filter(layer => layer !== null).reverse(), // Добавляем слои в обратном порядке
       view: new View({
         center: fromLonLat([105.31, 56.48]),
         zoom: 12
@@ -127,39 +140,65 @@ const MapComponent = () => {
 /*     blur.addEventListener('input', function () {
       heatMapLayer.setBlur(parseInt(blur.value, 10));
     });
-    
+
     radius.addEventListener('input', function () {
       heatMapLayer.setRadius(parseInt(radius.value, 10));
     });
  */
+
     return () => {
       map.dispose();
-      // map.setTarget(null);
     }
-  }, [selectedLayer]);
+  }, [layers]);
 
-  const handleLayerChange = (value) => {
-    setSelectedLayer(value);
+  const handleLayerChange = (id, visible) => {
+    setLayers(layers.map(layer =>
+        layer.id === id ? { ...layer, visible } : layer
+    ));
   };
 
-  const layerOptions = [
-    { label: 'Points', value: 'uchastok' },
-    { label: 'TopoMap', value: 'topomap' }
-  ];
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+    const newLayers = [...layers];
+    const [movedLayer] = newLayers.splice(sourceIndex, 1);
+    newLayers.splice(targetIndex, 0, movedLayer);
+    setLayers(newLayers);
+  };
 
   return (
-    <div>
-      <SelectWidget options={layerOptions} onChange={handleLayerChange} />
-      <div id="map" style={{ width: '800px', height: '600px' }} ref={mapRef}></div>
-{/*       
-      <form>
-        <label for="radius">radius size</label>
-        <input id="radius" type="range" min="1" max="50" step="1" value="5" />
-        <label for="blur">blur size</label>
-        <input id="blur" type="range" min="1" max="50" step="1" value="15" />
-      </form>
-      
- */}    </div>
+      <div>
+        <div>
+          {layers.map((layer, index) => (
+              <div
+                  key={layer.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnter={handleDragOver}
+                  style={{ padding: '10px', border: '1px solid #ccc', margin: '5px 0', cursor: 'move' }}
+              >
+                <label>
+                  <input
+                      type="checkbox"
+                      checked={layer.visible}
+                      onChange={(e) => handleLayerChange(layer.id, e.target.checked)}
+                  />
+                  {layer.label}
+                </label>
+              </div>
+          ))}
+        </div>
+        <div id="map" style={{ width: '800px', height: '600px' }} ref={mapRef}></div>
+      </div>
   );
 };
 
