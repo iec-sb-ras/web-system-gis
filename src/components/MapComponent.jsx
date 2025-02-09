@@ -24,6 +24,7 @@ const MapComponent = () => {
     '#AE2012', '#9B2226'];
 
   const paletteFunc = (cls) => {
+    cls += 3;
     if (localPalette.length < cls) {
       cls = cls % localPalette.length;
     };
@@ -43,7 +44,7 @@ const MapComponent = () => {
         id: item.id
       });
       feat.data = eitem;
-      console.log(feat.data);
+      // console.log(feat.data);
       return feat;
     });
 
@@ -58,7 +59,7 @@ const MapComponent = () => {
           image: new Circle({
             radius: circleRadius,
             fill: new Fill({ color: paletteFunc(feature.data.t) }),
-            stroke: new Stroke({ color: '#006666', width: 2 }),
+            stroke: new Stroke({ color: paletteFunc(feature.data.t+4), width: 2 }),
             displacement: [-circleRadius, -circleRadius]
           }),
           text: new Text({
