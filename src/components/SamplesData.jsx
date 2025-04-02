@@ -11,7 +11,6 @@ import Point from 'ol/geom/Point';
 import GeoJSON from 'ol/format/GeoJSON';
 import { fromLonLat } from 'ol/proj';
 import { Style, Circle, Fill, Stroke, Text } from 'ol/style';
-import Overlay from 'ol/Overlay';
 import 'ol/ol.css';
 
 const data = [
@@ -31,89 +30,96 @@ const data = [
   { long: 105.1391621, lat: 52.8053496, sample: 2435, name: 'Муринский', description: 'Шлих 100 зн Au', data: { "Hg (мг/кг)": 0.0188, "As (мг/кг)": null, "Pb (мг/кг)": null, "Ba (мг/кг)": 17.98, "Sr (мг/кг)": 736, "V (мг/кг)": 113, "Cr (мг/кг)": 39, "Co (мг/кг)": 44, "Ni (мг/кг)": 10, "Cu (мг/кг)": 27, "Zn (мг/кг)": 18 } }
 ];
 
-const MapComponent = () => {
+const SamplesData = () => {
   const mapRef = useRef();
-  const popupRef = useRef();
-  const mapInstance = useRef(null);
+  const [map, setMap] = useState(null);
   const [layers, setLayers] = useState([
-    { id: 'topomap', label: 'Топографическая карта', visible: true },
-    { id: 'russia-border', label: 'Контур России', visible: true },
+    { id: 'vector', label: 'Точки отбора проб', visible: true },
     { id: 'heatmap', label: 'Тепловая карта', visible: true },
-    { id: 'vector', label: 'Точки', visible: true }
+    { id: 'topomap', label: 'Топографическая карта', visible: true }
   ]);
   const [selectedParameter, setSelectedParameter] = useState('Hg (мг/кг)');
-  const [selectedSample, setSelectedSample] = useState(null);
-  const textShift = 7;
-  const circleRadius = 5;
+  const [showLabels, setShowLabels] = useState(true);
+  const textShift = 12;
+  const circleRadius = 6;
 
+  // Better color palette for geochemical data visualization
   const localPalette = [
-    '#ffffcc', '#ffeda0', '#fed976', '#feb24c',
-    '#fd8d3c', '#fc4e2a', '#e31a1c', '#bd0026', '#800026'
+    '#0d47a1', '#1976d2', '#42a5f5', '#90caf9',
+    '#e3f2fd', '#fffde7', '#fff59d', '#ffee58',
+    '#ffeb3b', '#f57f17'
   ];
 
-  const maxValues = {
-    "Hg (мг/кг)": 0.3,
-    "As (мг/кг)": 30,
-    "Pb (мг/кг)": 30,
-    "Ba (мг/кг)": 20,
-    "Sr (мг/кг)": 2000,
-    "V (мг/кг)": 300,
-    "Cr (мг/кг)": 300,
-    "Co (мг/кг)": 200,
-    "Ni (мг/кг)": 50,
-    "Cu (мг/кг)": 100,
-    "Zn (мг/кг)": 100
+  // Calculate actual max values from data for more accurate scaling
+  const calculateMaxValues = () => {
+    const result = {};
+    const parameters = Object.keys(data[0].data);
+
+    parameters.forEach(param => {
+      let max = 0;
+      data.forEach(item => {
+        if (item.data[param] !== null && !isNaN(item.data[param])) {
+          max = Math.max(max, item.data[param]);
+        }
+      });
+      // Add 20% buffer to max value for better visualization
+      result[param] = max * 1.2;
+    });
+
+    // Override with custom values for specific elements if needed
+    result["Hg (мг/кг)"] = 0.3; // Adjusted for outlier value 0.2699
+
+    return result;
   };
 
-  const getColor = (value, maxValue) => {
-    if (value === null || value === undefined || isNaN(value)) {
-      return '#cccccc';
-    }
-    const normalizedValue = Math.min(value / maxValue, 1);
+  const maxValues = calculateMaxValues();
+
+  const getColor = (value, parameter) => {
+    if (value === null || isNaN(value)) return '#ccc';
+
+    const normalizedValue = Math.min(value / maxValues[parameter], 1);
     const index = Math.floor(normalizedValue * (localPalette.length - 1));
     return localPalette[index];
   };
 
-  const getDisplayValue = (sample, parameter) => {
-    const value = sample.data[parameter];
-    if (value === null || value === undefined) return 'н.д.';
-    return value.toFixed(parameter === "Hg (мг/кг)" ? 4 : 2);
+  // Function to get normalized weight for heatmap
+  const getNormalizedWeight = (value, parameter) => {
+    if (value === null || isNaN(value)) return 0;
+    return Math.min(value / maxValues[parameter], 1);
   };
 
   useEffect(() => {
-    // Create features for vector layer
+    // Create point features
     const features = data.map(item => {
-      const feat = new Feature({
+      const feature = new Feature({
         geometry: new Point(fromLonLat([item.long, item.lat])),
-        sample: item.sample.toString(),
         name: item.name,
+        sample: item.sample.toString(),
         description: item.description,
-        location: `${item.long.toFixed(6)}, ${item.lat.toFixed(6)}`,
-        ...item.data,
-        originalData: item
+        ...item.data
       });
-      return feat;
+      return feature;
     });
 
     const vectorSource = new VectorSource({
       features: features
     });
 
+    // Point vector layer
     const vectorLayer = new VectorLayer({
       source: vectorSource,
       style: (feature) => {
         const value = feature.get(selectedParameter);
-        const color = getColor(value, maxValues[selectedParameter]);
-        const sampleId = feature.get('sample');
+        const color = getColor(value, selectedParameter);
 
         return new Style({
           image: new Circle({
             radius: circleRadius,
-            fill: new Fill({ color: color }),
+            fill: new Fill({ color }),
             stroke: new Stroke({ color: '#000', width: 1 }),
           }),
-          text: new Text({
-            font: '11px Calibri,sans-serif',
+          text: showLabels ? new Text({
+            font: '12px Calibri,sans-serif',
             fill: new Fill({ color: '#000' }),
             stroke: new Stroke({
               color: '#fff',
@@ -121,27 +127,28 @@ const MapComponent = () => {
             }),
             offsetX: textShift,
             offsetY: -textShift,
-            text: sampleId
-          })
+            text: `${feature.get('sample')}: ${value !== null ? value.toFixed(4) : 'н/д'}`
+          }) : null
         });
       },
       visible: layers.find(layer => layer.id === 'vector').visible,
-      zIndex: 20
+      zIndex: 2
     });
 
+    // Heatmap layer with improved weight function
     const heatMapLayer = new HeatmapLayer({
       source: vectorSource,
       blur: 15,
-      radius: 10,
-      weight: function (feature) {
+      radius: 15,
+      weight: function(feature) {
         const value = feature.get(selectedParameter);
-        if (value === null || value === undefined || isNaN(value)) return 0;
-        return value / maxValues[selectedParameter];
+        return getNormalizedWeight(value, selectedParameter);
       },
       visible: layers.find(layer => layer.id === 'heatmap').visible,
-      zIndex: 10
+      zIndex: 1
     });
 
+    // Topographic base map
     const topoMapLayer = new TileLayer({
       title: 'OpenTopoMap',
       type: 'base',
@@ -152,305 +159,251 @@ const MapComponent = () => {
       zIndex: 0
     });
 
-
-    const map = new Map({
+    // Create and store map
+    const newMap = new Map({
       target: mapRef.current,
-      layers: [
-        topoMapLayer,
-        heatMapLayer,
-        vectorLayer
-      ],
+      layers: [topoMapLayer, heatMapLayer, vectorLayer],
       view: new View({
-        center: fromLonLat([104.5, 53.0]), // Center between Dundai and Murinskiy
-        zoom: 8
+        center: fromLonLat([104.75, 53.0]), // Adjusted to better show all sample points
+        zoom: 9
       })
     });
 
-    mapInstance.current = map;
+    setMap(newMap);
 
-    // Create popup overlay
-    const popup = new Overlay({
-      element: popupRef.current,
-      positioning: 'bottom-center',
-      stopEvent: false,
-      offset: [0, -10]
-    });
-    map.addOverlay(popup);
+    // Add popup or tooltip functionality
+    const createPopup = () => {
+      const container = document.createElement('div');
+      container.className = 'ol-popup';
+      const closer = document.createElement('a');
+      closer.className = 'ol-popup-closer';
+      const content = document.createElement('div');
+      content.id = 'popup-content';
 
-    map.on('click', function(evt) {
-      const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+      container.appendChild(closer);
+      container.appendChild(content);
+      document.body.appendChild(container);
+
+      return { container, content, closer };
+    };
+
+    const { container, content, closer } = createPopup();
+
+    // Add click interaction for sample points
+    newMap.on('click', function(evt) {
+      const feature = newMap.forEachFeatureAtPixel(evt.pixel, function(feature) {
         return feature;
       });
 
       if (feature) {
-        const originalData = feature.get('originalData');
-        if (originalData) {
-          setSelectedSample(originalData);
-          popup.setPosition(evt.coordinate);
-        }
+        const sample = feature.get('sample');
+        const name = feature.get('name');
+        const description = feature.get('description');
+        const value = feature.get(selectedParameter);
+
+        content.innerHTML = `
+          <h4>Проба №${sample}</h4>
+          <p><strong>Место:</strong> ${name}</p>
+          <p><strong>Описание:</strong> ${description}</p>
+          <p><strong>${selectedParameter}:</strong> ${value !== null ? value.toFixed(4) : 'нет данных'}</p>
+        `;
+
+        container.style.display = 'block';
+        const coordinates = feature.getGeometry().getCoordinates();
+        container.style.left = evt.pixel[0] + 'px';
+        container.style.top = evt.pixel[1] + 'px';
       } else {
-        setSelectedSample(null);
-        popup.setPosition(undefined);
+        container.style.display = 'none';
       }
     });
 
-    map.on('pointermove', function(e) {
-      const pixel = map.getEventPixel(e.originalEvent);
-      const hit = map.hasFeatureAtPixel(pixel);
-      map.getTargetElement().style.cursor = hit ? 'pointer' : '';
-    });
-
+    // Clean up
     return () => {
-      map.dispose();
-    };
-  }, [layers, selectedParameter]);
-
-  useEffect(() => {
-    if (!mapInstance.current) return;
-
-    const layersToUpdate = mapInstance.current.getLayers().getArray();
-
-    layersToUpdate.forEach(layer => {
-      if (layer instanceof HeatmapLayer) {
-        layer.getSource().refresh();
+      if (newMap) {
+        newMap.setTarget(null);
+        newMap.dispose();
       }
-      if (layer instanceof VectorLayer && layer.getSource() instanceof VectorSource) {
-        layer.changed();
+      document.body.removeChild(container);
+    };
+  }, [selectedParameter, showLabels]);
+
+  // Update layer visibility when changed in state
+  useEffect(() => {
+    if (!map) return;
+
+    map.getLayers().forEach(layer => {
+      const layerId = layer.get('id');
+      if (layerId) {
+        const layerState = layers.find(l => l.id === layerId);
+        if (layerState) {
+          layer.setVisible(layerState.visible);
+        }
       }
     });
-  }, [selectedParameter]);
+  }, [layers, map]);
+
+  // Set layer IDs for easier management
+  useEffect(() => {
+    if (!map) return;
+
+    map.getLayers().forEach((layer, index) => {
+      if (index === 0) layer.set('id', 'topomap');
+      if (index === 1) layer.set('id', 'heatmap');
+      if (index === 2) layer.set('id', 'vector');
+    });
+  }, [map]);
 
   const handleLayerChange = (id, visible) => {
     setLayers(layers.map(layer =>
         layer.id === id ? { ...layer, visible } : layer
     ));
-
-    if (!mapInstance.current) return;
-
-    const layersToUpdate = mapInstance.current.getLayers().getArray();
-
-    layersToUpdate.forEach(layer => {
-      if (layer instanceof HeatmapLayer && id === 'heatmap') {
-        layer.setVisible(visible);
-      } else if (layer instanceof VectorLayer && layer.getSource() instanceof VectorSource && id === 'vector') {
-        layer.setVisible(visible);
-      } else if (layer instanceof TileLayer && id === 'topomap') {
-        layer.setVisible(visible);
-      } else if (layer instanceof VectorLayer && id === 'russia-border') {
-        layer.setVisible(visible);
-      }
-    });
   };
 
-  const handleDragStart = (e, index) => {
-    e.dataTransfer.setData('text/plain', index.toString());
-  };
+  // Create legend for current parameter
+  const renderLegend = () => {
+    const steps = 5;
+    const legendItems = [];
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
+    for (let i = 0; i < steps; i++) {
+      const value = (maxValues[selectedParameter] / steps) * i;
+      const color = getColor(value, selectedParameter);
 
-  const handleDrop = (e, targetIndex) => {
-    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
-    const newLayers = [...layers];
-    const [movedLayer] = newLayers.splice(sourceIndex, 1);
-    newLayers.splice(targetIndex, 0, movedLayer);
-    setLayers(newLayers);
-  };
+      legendItems.push(
+          <div key={i} style={{ display: 'flex', alignItems: 'center', margin: '5px 0' }}>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              backgroundColor: color,
+              marginRight: '10px',
+              border: '1px solid #000'
+            }}></div>
+            <span>{value.toFixed(4)}</span>
+          </div>
+      );
+    }
 
-  const legendColors = [];
-  for (let i = 0; i < localPalette.length; i++) {
-    const value = (maxValues[selectedParameter] * i / (localPalette.length - 1)).toFixed(4);
-    legendColors.push({ color: localPalette[i], value });
-  }
+    return (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          right: '20px',
+          backgroundColor: 'white',
+          padding: '10px',
+          border: '1px solid #ccc',
+          borderRadius: '5px',
+          zIndex: 1000
+        }}>
+          <h4>{selectedParameter}</h4>
+          {legendItems}
+          <div style={{ display: 'flex', alignItems: 'center', margin: '5px 0' }}>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              backgroundColor: getColor(maxValues[selectedParameter], selectedParameter),
+              marginRight: '10px',
+              border: '1px solid #000'
+            }}></div>
+            <span>{maxValues[selectedParameter].toFixed(4)}</span>
+          </div>
+        </div>
+    );
+  };
 
   return (
-      <div>
-        <div className="map-container" style={{ position: 'relative' }}>
-          <div className="controls-panel" style={{
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
-            zIndex: 1000,
-            backgroundColor: 'white',
-            padding: '10px',
-            borderRadius: '4px',
-            boxShadow: '0 0 10px rgba(0,0,0,0.2)'
-          }}>
-            <h3>Настройки слоев</h3>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Параметр:</label>
-              <select
-                  value={selectedParameter}
-                  onChange={(e) => setSelectedParameter(e.target.value)}
-                  style={{ width: '100%', padding: '5px' }}
-              >
-                <option value="Hg (мг/кг)">Ртуть (Hg)</option>
-                <option value="As (мг/кг)">Мышьяк (As)</option>
-                <option value="Pb (мг/кг)">Свинец (Pb)</option>
-                <option value="Ba (мг/кг)">Барий (Ba)</option>
-                <option value="Sr (мг/кг)">Стронций (Sr)</option>
-                <option value="V (мг/кг)">Ванадий (V)</option>
-                <option value="Cr (мг/кг)">Хром (Cr)</option>
-                <option value="Co (мг/кг)">Кобальт (Co)</option>
-                <option value="Ni (мг/кг)">Никель (Ni)</option>
-                <option value="Cu (мг/кг)">Медь (Cu)</option>
-                <option value="Zn (мг/кг)">Цинк (Zn)</option>
-              </select>
-            </div>
-
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Слои:</label>
-              {layers.map((layer, index) => (
-                  <div
-                      key={layer.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, index)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, index)}
-                      style={{
-                        padding: '5px',
-                        border: '1px solid #ccc',
-                        margin: '3px 0',
-                        cursor: 'move',
-                        backgroundColor: layer.visible ? '#f0f9ff' : '#f5f5f5'
-                      }}
-                  >
-                    <label style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ position: 'relative' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          margin: '10px 0',
+          padding: '10px',
+          backgroundColor: '#f5f5f5',
+          borderRadius: '5px'
+        }}>
+          <div>
+            <h3>Параметры отображения:</h3>
+            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+              {layers.map((layer) => (
+                  <div key={layer.id} style={{ padding: '5px', border: '1px solid #ccc', borderRadius: '3px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <input
                           type="checkbox"
                           checked={layer.visible}
                           onChange={(e) => handleLayerChange(layer.id, e.target.checked)}
-                          style={{ marginRight: '5px' }}
                       />
                       {layer.label}
                     </label>
                   </div>
               ))}
-            </div>
-
-            {/* Legend */}
-            <div className="legend" style={{ marginTop: '10px' }}>
-              <h4>Легенда ({selectedParameter.split(' ')[0]})</h4>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {legendColors.map((item, index) => (
-                    <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
-                      <div style={{
-                        width: '20px',
-                        height: '10px',
-                        backgroundColor: item.color,
-                        marginRight: '5px',
-                        border: '1px solid #000'
-                      }}></div>
-                      <small>{item.value}</small>
-                    </div>
-                ))}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginTop: '5px',
-                  marginBottom: '2px'
-                }}>
-                  <div style={{
-                    width: '20px',
-                    height: '10px',
-                    backgroundColor: '#cccccc',
-                    marginRight: '5px',
-                    border: '1px solid #000'
-                  }}></div>
-                  <small>н.д. (нет данных)</small>
-                </div>
+              <div style={{ padding: '5px', border: '1px solid #ccc', borderRadius: '3px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <input
+                      type="checkbox"
+                      checked={showLabels}
+                      onChange={(e) => setShowLabels(e.target.checked)}
+                  />
+                  Отображать подписи
+                </label>
               </div>
             </div>
           </div>
 
-          {/* Map */}
-          <div
-              id="map"
-              style={{ width: '800px', height: '600px' }}
-              ref={mapRef}
-          ></div>
-
-          {/* Popup for sample details */}
-          <div
-              ref={popupRef}
-              style={{
-                display: selectedSample ? 'block' : 'none',
-                position: 'absolute',
-                backgroundColor: 'white',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                padding: '15px',
-                borderRadius: '10px',
-                border: '1px solid #cccccc',
-                bottom: '12px',
-                left: '-50px',
-                minWidth: '280px',
-                zIndex: 1000
-              }}
-          >
-            {selectedSample && (
-                <div>
-                  <h3 style={{ margin: '0 0 10px 0' }}>
-                    {selectedSample.name} - Проба №{selectedSample.sample}
-                  </h3>
-                  <p style={{ margin: '0 0 5px 0' }}>
-                    <strong>Описание:</strong> {selectedSample.description}
-                  </p>
-                  <p style={{ margin: '0 0 10px 0' }}>
-                    <strong>Координаты:</strong> {selectedSample.long.toFixed(6)}, {selectedSample.lat.toFixed(6)}
-                  </p>
-
-                  <h4 style={{ margin: '10px 0 5px 0' }}>Содержание элементов:</h4>
-                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', padding: '3px', borderBottom: '1px solid #ddd' }}>Элемент</th>
-                        <th style={{ textAlign: 'right', padding: '3px', borderBottom: '1px solid #ddd' }}>Значение</th>
-                      </tr>
-                      </thead>
-                      <tbody>
-                      {Object.entries(selectedSample.data).map(([key, value]) => (
-                          <tr key={key} style={{
-                            backgroundColor: key === selectedParameter ? '#f0f9ff' : 'transparent',
-                            fontWeight: key === selectedParameter ? 'bold' : 'normal'
-                          }}>
-                            <td style={{ padding: '3px', borderBottom: '1px solid #eee' }}>{key}</td>
-                            <td style={{
-                              textAlign: 'right',
-                              padding: '3px',
-                              borderBottom: '1px solid #eee'
-                            }}>
-                              {value !== null ? (
-                                  key === "Hg (мг/кг)" ? value.toFixed(4) : value.toFixed(2)
-                              ) : 'н.д.'}
-                            </td>
-                          </tr>
-                      ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <button
-                      onClick={() => setSelectedSample(null)}
-                      style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '10px',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '16px'
-                      }}
-                  >
-                    ✕
-                  </button>
-                </div>
-            )}
+          <div>
+            <label htmlFor="parameter-select">Отображаемый элемент: </label>
+            <select
+                id="parameter-select"
+                value={selectedParameter}
+                onChange={(e) => setSelectedParameter(e.target.value)}
+                style={{ padding: '5px', borderRadius: '3px' }}
+            >
+              <option value="Hg (мг/кг)">Ртуть (Hg)</option>
+              <option value="As (мг/кг)">Мышьяк (As)</option>
+              <option value="Pb (мг/кг)">Свинец (Pb)</option>
+              <option value="Ba (мг/кг)">Барий (Ba)</option>
+              <option value="Sr (мг/кг)">Стронций (Sr)</option>
+              <option value="V (мг/кг)">Ванадий (V)</option>
+              <option value="Cr (мг/кг)">Хром (Cr)</option>
+              <option value="Co (мг/кг)">Кобальт (Co)</option>
+              <option value="Ni (мг/кг)">Никель (Ni)</option>
+              <option value="Cu (мг/кг)">Медь (Cu)</option>
+              <option value="Zn (мг/кг)">Цинк (Zn)</option>
+            </select>
           </div>
         </div>
+
+        <div
+            className="map-container"
+            style={{ width: '100%', height: '600px', position: 'relative' }}
+            ref={mapRef}
+        >
+          {renderLegend()}
+        </div>
+
+        <style jsx>{`
+        .ol-popup {
+          position: absolute;
+          background-color: white;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+          padding: 15px;
+          border-radius: 10px;
+          border: 1px solid #cccccc;
+          bottom: 12px;
+          left: -50px;
+          min-width: 280px;
+          display: none;
+        }
+        .ol-popup-closer {
+          text-decoration: none;
+          position: absolute;
+          top: 2px;
+          right: 8px;
+        }
+        .ol-popup-closer:after {
+          content: "✖";
+        }
+      `}</style>
       </div>
   );
 };
 
-export default MapComponent;
+export default SamplesData;

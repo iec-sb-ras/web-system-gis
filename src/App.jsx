@@ -10,7 +10,7 @@ function App() {
     return (
         <div className="App">
             <h5>Местоположение взятия проб</h5>
-            <MapComponent1 />
+            <SamplesData />
             {/*<MapComponent1 />*/}
         </div>
     );
