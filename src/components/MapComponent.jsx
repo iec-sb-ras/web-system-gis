@@ -8,6 +8,7 @@ import VectorSource from 'ol/source/Vector';
 import HeatmapLayer from 'ol/layer/Heatmap';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
+import GeoJSON from 'ol/format/GeoJSON';
 import { fromLonLat } from 'ol/proj';
 import { Style, Circle, Fill, Stroke, Text } from 'ol/style';
 import data from '../data';
@@ -20,7 +21,8 @@ const MapComponent = () => {
   const [layers, setLayers] = useState([
     { id: 'vector', label: 'Точки', visible: true },
     { id: 'heatmap', label: 'Тепловая карта', visible: true },
-    { id: 'topomap', label: 'Топографическая карта', visible: true }
+    { id: 'topomap', label: 'Топографическая карта', visible: true },
+    { id: 'russia-border', label: 'Контур России', visible: true }
   ]);
   const textShift = 20;
   const circleRadius = 10;
@@ -49,12 +51,8 @@ const MapComponent = () => {
         id: item.id
       });
       feat.data = eitem;
-      // console.log(feat.data);
       return feat;
     });
-
-    // const blur = document.getElementById('blur');
-    // const radius = document.getElementById('radius');
 
     const vectorSource = new VectorSource({
       features: features
@@ -86,23 +84,6 @@ const MapComponent = () => {
       visible: layers.find(layer => layer.id === 'vector').visible
     });
 
-    // const heatMapLayer = new HeatmapLayer({
-    //   source: new VectorSource({
-    //     features:features
-    //   }),
-    //   blur: 30, // parseInt(blur.value, 10),
-    //   radius: 30, // parseInt(radius.value, 10),
-    //   weight: function (feature) {
-    //     // 2012_Earthquakes_Mag5.kml stores the magnitude of each earthquake in a
-    //     // standards-violating <magnitude> tag in each Placemark.  We extract it from
-    //     // the Placemark's name instead.
-    //     const name = feature.get('name');
-    //     const magnitude = feature.data.value;
-    //     return magnitude - 5;
-    //   },
-    //   visible: selectedLayer === 'uchastok'
-    // });
-
     const heatMapLayer = new HeatmapLayer({
       source: vectorSource,
       blur: 30,
@@ -123,6 +104,46 @@ const MapComponent = () => {
       })
     });
 
+    // fetch('path/to/russia-border.geojson')
+    //     .then(response => response.json())
+    //     .then(data => {
+    //       const geojsonFormat = new GeoJSON();
+    //       const features = geojsonFormat.readFeatures(data);
+    //       const russiaSource = new VectorSource({
+    //         features: features
+    //       });
+    //
+    //       const russiaLayer = new VectorLayer({
+    //         source: russiaSource,
+    //         style: new Style({
+    //           stroke: new Stroke({
+    //             color: 'black',
+    //             width: 2
+    //           })
+    //         }),
+    //         visible: layers.find(layer => layer.id === 'russia-border').visible
+    //       });
+    //
+    //       const map = new Map({
+    //         target: mapRef.current,
+    //         layers: layers.map(layer => {
+    //           if (layer.id === 'vector') return vectorLayer;
+    //           if (layer.id === 'heatmap') return heatMapLayer;
+    //           if (layer.id === 'topomap') return topoMapLayer;
+    //           if (layer.id === 'russia-border') return russiaLayer;
+    //           return null;
+    //         }).filter(layer => layer !== null).reverse(),
+    //         view: new View({
+    //           center: fromLonLat([105.31, 56.48]),
+    //           zoom: 4
+    //         })
+    //       });
+    //
+    //       return () => {
+    //         map.dispose();
+    //       }
+    //     });
+
     const map = new Map({
       target: mapRef.current,
       layers: layers.map(layer => {
@@ -136,19 +157,7 @@ const MapComponent = () => {
         zoom: 12
       })
     });
-
-/*     blur.addEventListener('input', function () {
-      heatMapLayer.setBlur(parseInt(blur.value, 10));
-    });
-
-    radius.addEventListener('input', function () {
-      heatMapLayer.setRadius(parseInt(radius.value, 10));
-    });
- */
-
-    return () => {
-      map.dispose();
-    }
+    return () => {};
   }, [layers]);
 
   const handleLayerChange = (id, visible) => {
